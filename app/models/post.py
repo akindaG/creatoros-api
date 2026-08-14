@@ -45,6 +45,11 @@ class Post(Base):
         default="draft",
         server_default=text("'draft'"),
     )
+    
+    scheduled_time = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     created_at = Column(
         DateTime(timezone=True),
