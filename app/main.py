@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.api.routes import posts
 
 
 app = FastAPI(
@@ -18,6 +19,7 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(social_accounts_router)
 app.include_router(users_router)
+app.include_router(posts.router)
 
 
 @app.get("/")
