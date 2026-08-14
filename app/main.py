@@ -1,4 +1,8 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
 
 
 app = FastAPI(
@@ -22,4 +26,15 @@ def health_check():
     return {
         "status": "healthy",
         "service": "creatoros-api",
+    }
+
+
+@app.get("/health/db")
+def database_health(db: Session = Depends(get_db)):
+    result = db.execute(text("SELECT 1"))
+
+    return {
+        "status": "healthy",
+        "database": "connected",
+        "result": result.scalar(),
     }
