@@ -1,3 +1,4 @@
+from app.api.routes.auth import router as auth_router
 from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ app = FastAPI(
     description="AI-Powered Social Growth Intelligence Platform",
     version="1.0.0",
 )
+app.include_router(auth_router)
 
 
 @app.get("/")
