@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.routes.ai import router as ai_router
 from app.api.routes.analytics import router as analytics_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.internal import router as internal_router
 from app.api.routes.media import router as media_router
 from app.api.routes.posts import router as posts_router
 from app.api.routes.publishing import router as publishing_router
@@ -22,6 +23,8 @@ app = FastAPI(
     title="CreatorOS AI API",
     description="AI-Powered Social Growth Intelligence Platform",
     version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
 app.add_middleware(
@@ -46,18 +49,24 @@ for router in (
     analytics_router,
     recommendations_router,
     publishing_router,
+    internal_router,
 ):
     app.include_router(router)
 
 
 @app.get("/")
 def root():
-    return {"status": "success", "message": "CreatorOS AI API is running", "version": "1.0.0"}
+    return {
+        "status": "success",
+        "message": "CreatorOS AI API is running",
+        "version": "1.0.0",
+        "environment": settings.app_env,
+    }
 
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "service": "creatoros-api"}
+    return {"status": "healthy", "service": "creatoros-api", "version": "1.0.0"}
 
 
 @app.get("/health/db")
