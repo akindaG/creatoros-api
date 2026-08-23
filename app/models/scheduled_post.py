@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, String, text
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
@@ -7,6 +7,10 @@ from app.core.database import Base
 class ScheduledPost(Base):
     __tablename__ = "scheduled_posts"
     __table_args__ = (
+        CheckConstraint(
+            "platform IN ('instagram', 'facebook')",
+            name="scheduled_posts_platform_check",
+        ),
         Index("idx_scheduled_posts_time", "schedule_time"),
         Index("idx_scheduled_posts_state_time", "publish_state", "schedule_time"),
     )
