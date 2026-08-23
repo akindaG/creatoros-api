@@ -38,6 +38,29 @@ class DashboardAnalytics(BaseModel):
     posts_count: int
 
 
+class AnalyticsSeriesPoint(BaseModel):
+    captured_at: datetime
+    reach: int
+    engagements: int
+    engagement_rate: float
+
+
+class TopPostAnalytics(BaseModel):
+    post_id: UUID
+    title: str
+    platform: str
+    reach: int
+    engagements: int
+    engagement_rate: float
+
+
+class AnalyticsOverview(BaseModel):
+    metrics: DashboardAnalytics
+    series: list[AnalyticsSeriesPoint]
+    top_posts: list[TopPostAnalytics]
+    platform_reach: dict[str, int]
+
+
 class BestTimeResponse(BaseModel):
     best_day: str | None
     best_hour: int | None
