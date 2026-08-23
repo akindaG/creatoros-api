@@ -1,7 +1,10 @@
 import os
+from uuid import uuid4
 
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/creatoros_test")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key")
+os.environ.setdefault("SOCIAL_TOKEN_ENCRYPTION_KEY", "test-social-token-secret")
+os.environ.setdefault("CRON_SECRET", "test-cron-secret")
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("OLLAMA_BASE_URL", "http://127.0.0.1:9")
 os.environ.setdefault("OLLAMA_TIMEOUT_SECONDS", "0.2")
@@ -31,9 +34,15 @@ def client():
 
 @pytest.fixture()
 def auth_headers(client):
-    payload = {"name": "Test Creator", "email": "creator@example.com", "password": "StrongPass123"}
+    payload = {
+        "name": "Test Creator",
+        "email": f"creator-{uuid4().hex[:10]}@example.com",
+        "password": "StrongPass123",
+    }
     response = client.post("/api/v1/auth/register", json=payload)
-    if response.status_code not in {201, 409}:
-        raise AssertionError(response.text)
-    token = client.post("/api/v1/auth/login", json={"email": payload["email"], "password": payload["password"]}).json()["access_token"]
+    assert response.status_code == 201, response.text
+    token = client.post(
+        "/api/v1/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    ).json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

@@ -10,21 +10,39 @@ from app.core.database import get_db
 from app.models.analytics import Analytics
 from app.models.post import Post
 from app.models.user import User
-from app.schemas.analytics import AnalyticsSnapshotCreate, AnalyticsSnapshotResponse, DashboardAnalytics
-from app.services.analytics import dashboard_metrics
+from app.schemas.analytics import (
+    AnalyticsOverview,
+    AnalyticsSnapshotCreate,
+    AnalyticsSnapshotResponse,
+    DashboardAnalytics,
+)
+from app.services.analytics import analytics_overview, dashboard_metrics
 
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["Analytics"])
 
 
 @router.post("/posts/{post_id}", response_model=AnalyticsSnapshotResponse, status_code=201)
-def create_snapshot(post_id: UUID, data: AnalyticsSnapshotCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_snapshot(
+    post_id: UUID,
+    data: AnalyticsSnapshotCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     post = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     interactions = data.likes + data.comments + data.shares
     engagement_rate = round(interactions / data.reach * 100, 2) if data.reach else 0.0
-    row = Analytics(post_id=post.id, followers=data.followers, reach=data.reach, likes=data.likes, comments=data.comments, shares=data.shares, engagement_rate=engagement_rate)
+    row = Analytics(
+        post_id=post.id,
+        followers=data.followers,
+        reach=data.reach,
+        likes=data.likes,
+        comments=data.comments,
+        shares=data.shares,
+        engagement_rate=engagement_rate,
+    )
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -36,8 +54,17 @@ def dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     return dashboard_metrics(db, current_user.id)
 
 
+@router.get("/overview", response_model=AnalyticsOverview)
+def overview(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return analytics_overview(db, current_user.id)
+
+
 @router.get("/posts/{post_id}", response_model=list[AnalyticsSnapshotResponse])
-def post_analytics(post_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def post_analytics(
+    post_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     post = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
@@ -52,4 +79,8 @@ def export_report(db: Session = Depends(get_db), current_user: User = Depends(ge
     writer.writerow(["metric", "value"])
     for key, value in metrics.items():
         writer.writerow([key, value])
-    return Response(content=output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=creatoros-analytics.csv"})
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=creatoros-analytics.csv"},
+    )
