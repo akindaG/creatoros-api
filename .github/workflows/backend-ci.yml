@@ -28,7 +28,7 @@ jobs:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/creatoros_test
       JWT_SECRET_KEY: github-actions-test-secret
       SOCIAL_TOKEN_ENCRYPTION_KEY: github-actions-token-secret
-      CRON_SECRET: github-actions-cron-secret
+      CRON_SECRET: test-cron-secret
       APP_ENV: test
       OLLAMA_BASE_URL: http://127.0.0.1:9
       OLLAMA_TIMEOUT_SECONDS: "0.2"
