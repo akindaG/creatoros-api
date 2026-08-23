@@ -2,6 +2,12 @@
 
 FastAPI backend for CreatorOS AI, an AI-powered Social Growth Intelligence Platform for Facebook and Instagram creators.
 
+## Project repositories
+
+- Frontend: https://github.com/akindaG/creatoros-web
+- Backend: https://github.com/akindaG/creatoros-api
+- Documentation: https://github.com/akindaG/creatoros-docs
+
 ## MVP capabilities
 
 - JWT registration, login, logout, profile and password reset
@@ -140,3 +146,5 @@ Recommended Railway environment variables:
 6. Record or sync analytics data.
 7. View analytics and growth recommendations.
 8. Publish in simulation mode or live Meta mode.
+
+For architecture, testing, deployment and presentation documentation, see the `creatoros-docs` repository.
