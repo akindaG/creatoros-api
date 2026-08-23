@@ -31,6 +31,10 @@ class Settings(BaseSettings):
 
     social_publish_mode: str = "simulate"
     meta_graph_base_url: str = "https://graph.facebook.com/v23.0"
+    social_token_encryption_key: Optional[str] = None
+
+    cron_secret: Optional[str] = None
+    publish_batch_size: int = 100
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -44,6 +48,10 @@ class Settings(BaseSettings):
     @property
     def media_path(self) -> Path:
         return Path(self.media_local_dir)
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() == "production"
 
 
 settings = Settings()
