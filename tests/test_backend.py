@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 from app.core.database import SessionLocal
 from app.models.social_account import SocialAccount
@@ -12,11 +13,24 @@ def test_health(client):
     assert db.json()["result"] == 1
 
 
-def test_auth_profile_and_password_reset(client, auth_headers):
-    me = client.get("/api/v1/auth/me", headers=auth_headers)
+def test_auth_profile_and_password_reset(client):
+    email = f"reset-{uuid4().hex[:10]}@example.com"
+    password = "StrongPass123"
+    registered = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Reset Creator", "email": email, "password": password},
+    )
+    assert registered.status_code == 201, registered.text
+    access_token = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    me = client.get("/api/v1/auth/me", headers=headers)
     assert me.status_code == 200
-    assert me.json()["email"] == "creator@example.com"
-    forgot = client.post("/api/v1/auth/forgot-password", json={"email": "creator@example.com"})
+    assert me.json()["email"] == email
+    forgot = client.post("/api/v1/auth/forgot-password", json={"email": email})
     assert forgot.status_code == 200
     token = forgot.json()["reset_token"]
     reset = client.post(
@@ -26,7 +40,7 @@ def test_auth_profile_and_password_reset(client, auth_headers):
     assert reset.status_code == 200
     login = client.post(
         "/api/v1/auth/login",
-        json={"email": "creator@example.com", "password": "NewStrongPass123"},
+        json={"email": email, "password": "NewStrongPass123"},
     )
     assert login.status_code == 200
 
@@ -42,11 +56,12 @@ def test_social_credentials_are_encrypted(client, auth_headers):
             "access_token": "plain-secret-token",
         },
     )
-    assert response.status_code in {201, 409}, response.text
+    assert response.status_code == 201, response.text
 
+    account_id = response.json()["id"]
     db = SessionLocal()
     try:
-        account = db.query(SocialAccount).filter(SocialAccount.platform == "facebook").first()
+        account = db.query(SocialAccount).filter(SocialAccount.id == account_id).first()
         assert account is not None
         assert account.access_token != "plain-secret-token"
         assert account.access_token.startswith("enc:v1:")
@@ -64,7 +79,7 @@ def test_internal_cron_is_protected(client):
 
 
 def test_end_to_end_mvp(client):
-    email = "journey@example.com"
+    email = f"journey-{uuid4().hex[:10]}@example.com"
     password = "StrongPass123"
     assert client.post(
         "/api/v1/auth/register",
