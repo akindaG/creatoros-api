@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     frontend_origins: str = "http://localhost:3000"
 
+    ai_provider: str = "gemini"
+    gemini_api_key: Optional[str] = None
+    gemini_model: str = "gemini-3.5-flash-lite"
+
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen3"
     ollama_timeout_seconds: float = 45.0
