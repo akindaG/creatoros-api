@@ -1,4 +1,5 @@
 import uuid
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy.orm import Session
@@ -11,6 +12,12 @@ from app.services.token_crypto import decrypt_token
 
 class PublishError(RuntimeError):
     pass
+
+
+def _is_video_url(value: str | None) -> bool:
+    if not value:
+        return False
+    return urlparse(value).path.lower().endswith(".mp4")
 
 
 def publish_post(db: Session, post: Post, user_id) -> dict:
@@ -43,7 +50,17 @@ def publish_post(db: Session, post: Post, user_id) -> dict:
     base = settings.meta_graph_base_url.rstrip("/")
     try:
         if post.platform == "facebook":
-            if post.media_url:
+            if _is_video_url(post.media_url):
+                response = httpx.post(
+                    f"{base}/{platform_account_id}/videos",
+                    data={
+                        "file_url": post.media_url,
+                        "description": post.caption or post.title,
+                        "access_token": access_token,
+                    },
+                    timeout=60,
+                )
+            elif post.media_url:
                 response = httpx.post(
                     f"{base}/{platform_account_id}/photos",
                     data={

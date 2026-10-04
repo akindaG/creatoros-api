@@ -237,3 +237,44 @@ def test_failed_post_now_keeps_draft_retryable(client, auth_headers, monkeypatch
         assert row.status == "draft"
     finally:
         db.close()
+
+
+def test_live_facebook_video_publish_uses_videos_endpoint(client, auth_headers, monkeypatch):
+    social = client.post(
+        "/api/v1/social-accounts",
+        headers=auth_headers,
+        json={
+            "platform": "facebook",
+            "platform_account_id": "video-page-id",
+            "account_name": "Video Test Page",
+            "access_token": "video-page-token",
+        },
+    )
+    assert social.status_code == 201, social.text
+
+    post = _create_post(
+        client,
+        auth_headers,
+        media_url="https://cdn.example.com/creator-video.mp4?download=1",
+    )
+    monkeypatch.setattr(settings, "social_publish_mode", "live")
+
+    captured = {}
+
+    def fake_post(url, data=None, timeout=30):
+        captured["url"] = url
+        captured["data"] = data
+        captured["timeout"] = timeout
+        return FakeResponse({"id": "video-123"})
+
+    import app.services.social_publish as social_publish
+
+    monkeypatch.setattr(social_publish.httpx, "post", fake_post)
+
+    published = client.post(f"/api/v1/publishing/posts/{post['id']}", headers=auth_headers)
+    assert published.status_code == 200, published.text
+    assert captured["url"].endswith("/video-page-id/videos")
+    assert captured["data"]["file_url"].startswith("https://cdn.example.com/")
+    assert captured["data"]["description"] == "CreatorOS end-to-end publishing test."
+    assert captured["data"]["access_token"] == "video-page-token"
+    assert captured["timeout"] == 60
