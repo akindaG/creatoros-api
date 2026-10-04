@@ -36,12 +36,16 @@ def publish_post(db: Session, post: Post, user_id) -> dict:
     if not access_token:
         raise PublishError("Connected account has no access token")
 
+    platform_account_id = account.platform_account_id or account.account_name
+    if not platform_account_id:
+        raise PublishError("Connected account has no platform account ID")
+
     base = settings.meta_graph_base_url.rstrip("/")
     try:
         if post.platform == "facebook":
             if post.media_url:
                 response = httpx.post(
-                    f"{base}/{account.account_name}/photos",
+                    f"{base}/{platform_account_id}/photos",
                     data={
                         "url": post.media_url,
                         "caption": post.caption or post.title,
@@ -51,7 +55,7 @@ def publish_post(db: Session, post: Post, user_id) -> dict:
                 )
             else:
                 response = httpx.post(
-                    f"{base}/{account.account_name}/feed",
+                    f"{base}/{platform_account_id}/feed",
                     data={"message": post.caption or post.title, "access_token": access_token},
                     timeout=30,
                 )
@@ -62,7 +66,7 @@ def publish_post(db: Session, post: Post, user_id) -> dict:
             if not post.media_url:
                 raise PublishError("Instagram publishing requires a public media URL")
             create = httpx.post(
-                f"{base}/{account.account_name}/media",
+                f"{base}/{platform_account_id}/media",
                 data={
                     "image_url": post.media_url,
                     "caption": post.caption or post.title,
@@ -75,7 +79,7 @@ def publish_post(db: Session, post: Post, user_id) -> dict:
             if not creation_id:
                 raise PublishError("Meta did not return an Instagram media container ID")
             publish = httpx.post(
-                f"{base}/{account.account_name}/media_publish",
+                f"{base}/{platform_account_id}/media_publish",
                 data={"creation_id": creation_id, "access_token": access_token},
                 timeout=30,
             )
