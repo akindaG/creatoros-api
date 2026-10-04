@@ -12,6 +12,7 @@ from app.models.scheduled_post import ScheduledPost
 from app.models.social_account import SocialAccount
 from app.models.user import User
 from app.schemas.scheduling import CalendarItem, ScheduleRequest, ScheduleResponse
+from app.services.exact_scheduler import notify_schedule_changed
 
 
 router = APIRouter(prefix="/api/v1", tags=["Scheduling"])
@@ -55,6 +56,7 @@ def schedule_post(post_id: UUID, data: ScheduleRequest, db: Session = Depends(ge
     post.status = "scheduled"
     db.commit()
     db.refresh(schedule)
+    notify_schedule_changed()
     return schedule
 
 
@@ -73,6 +75,7 @@ def cancel_schedule(post_id: UUID, db: Session = Depends(get_db), current_user: 
     post.status = "draft"
     post.scheduled_time = None
     db.commit()
+    notify_schedule_changed()
     return {"message": "Schedule cancelled"}
 
 
