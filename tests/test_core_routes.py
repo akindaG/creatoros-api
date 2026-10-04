@@ -197,6 +197,22 @@ def test_analytics_post_history_and_report(client, auth_headers):
     assert history.status_code == 200
     assert len(history.json()) == 2
 
+    dashboard = client.get("/api/v1/analytics/dashboard", headers=auth_headers)
+    assert dashboard.status_code == 200
+    # Snapshots are cumulative point-in-time values. The dashboard should use
+    # the latest value for this post instead of summing 100 + 250.
+    assert dashboard.json()["reach"] == 250
+    assert dashboard.json()["likes"] == 40
+
+    overview = client.get("/api/v1/analytics/overview", headers=auth_headers)
+    assert overview.status_code == 200
+    assert overview.json()["platform_reach"]["facebook"] == 250
+    assert overview.json()["top_posts"][0]["reach"] == 250
+
+    best_time = client.get("/api/v1/recommendations/best-time", headers=auth_headers)
+    assert best_time.status_code == 200
+    assert best_time.json()["sample_size"] == 1
+
     report = client.get("/api/v1/analytics/report", headers=auth_headers)
     assert report.status_code == 200
     assert report.headers["content-type"].startswith("text/csv")
