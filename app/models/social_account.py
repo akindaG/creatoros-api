@@ -25,6 +25,7 @@ class SocialAccount(Base):
     )
 
     platform = Column(String(20), nullable=False)
+    platform_account_id = Column(String(255), nullable=True)
     account_name = Column(String(255), nullable=False)
     username = Column(String(255), nullable=True)
     access_token = Column(Text, nullable=False)
