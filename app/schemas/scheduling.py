@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ScheduleRequest(BaseModel):
@@ -17,8 +17,7 @@ class ScheduleResponse(BaseModel):
     publish_state: str
     platform: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CalendarItem(BaseModel):
