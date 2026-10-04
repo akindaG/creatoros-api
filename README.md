@@ -17,7 +17,7 @@ FastAPI backend for CreatorOS AI, an AI-powered Social Growth Intelligence Platf
 - Image/video upload with Supabase Storage or local fallback
 - Scheduling, calendar, rescheduling and cancellation
 - Automatic due-post publishing worker
-- Ollama + Qwen caption generation, hashtag generation and content analysis
+- Gemini or Ollama/Qwen caption generation, hashtag generation and content analysis
 - Analytics snapshots, dashboard metrics, live overview, CSV export
 - Best posting-time and growth recommendation engine
 - Simulated or live Meta Graph publishing
@@ -63,16 +63,38 @@ FRONTEND_ORIGINS=http://localhost:3000
 
 For deployed Vercel URLs, use a comma-separated list if more than one origin is required.
 
-## AI
+## AI providers
 
-CreatorOS calls Ollama at `OLLAMA_BASE_URL` using `OLLAMA_MODEL=qwen3`.
+CreatorOS supports two AI providers behind the same API endpoints.
+
+Hosted production configuration:
+
+```env
+AI_PROVIDER=gemini
+GEMINI_API_KEY=<your Gemini API key>
+GEMINI_MODEL=gemini-3.5-flash-lite
+AI_FALLBACK_ENABLED=true
+```
+
+Local Qwen configuration:
+
+```env
+AI_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen3
+AI_FALLBACK_ENABLED=true
+```
+
+Then run:
 
 ```bash
 ollama serve
 ollama pull qwen3
 ```
 
-`AI_FALLBACK_ENABLED=true` keeps the MVP demonstrable if Ollama is temporarily unavailable.
+The endpoints `/api/v1/ai/caption`, `/api/v1/ai/hashtags`, and `/api/v1/ai/analyze` use the selected provider. Successful responses expose their source as `gemini` or `ollama`. If the selected provider is unavailable and `AI_FALLBACK_ENABLED=true`, CreatorOS uses its deterministic demo fallback instead of breaking the workflow.
+
+Never commit `GEMINI_API_KEY` or other production secrets to GitHub.
 
 ## Social publishing
 
@@ -113,7 +135,7 @@ alembic upgrade head
 pytest -q --cov=app --cov-report=term-missing
 ```
 
-GitHub Actions provisions PostgreSQL 16 and performs these checks automatically.
+GitHub Actions provisions PostgreSQL 16 and performs these checks automatically. Tests keep `AI_PROVIDER=ollama` with an unreachable local URL so the deterministic fallback path is exercised without making external Gemini calls in CI. Provider-selection tests mock Gemini and verify that the Gemini path is actually used when configured.
 
 ## Railway
 
@@ -130,6 +152,10 @@ Recommended Railway environment variables:
 - `DATABASE_URL=<Supabase/PostgreSQL connection string>`
 - `JWT_SECRET_KEY=<strong random secret>`
 - `FRONTEND_ORIGINS=<Vercel frontend URL>`
+- `AI_PROVIDER=gemini`
+- `GEMINI_API_KEY=<Gemini API key>`
+- `GEMINI_MODEL=gemini-3.5-flash-lite`
+- `AI_FALLBACK_ENABLED=true`
 - `SUPABASE_URL=<project URL>`
 - `SUPABASE_SERVICE_ROLE_KEY=<service role key>`
 - `SUPABASE_STORAGE_BUCKET=creatoros-media`
