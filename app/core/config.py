@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 25
 
     social_publish_mode: str = "simulate"
-    meta_graph_base_url: str = "https://graph.facebook.com/v23.0"
+    meta_graph_base_url: str = "https://graph.facebook.com/v26.0"
     meta_app_id: Optional[str] = None
     meta_app_secret: Optional[str] = None
     meta_redirect_uri: Optional[str] = None
