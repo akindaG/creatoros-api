@@ -20,6 +20,10 @@ def create_password_reset_token(user_id: str) -> str:
     return _encode_token(user_id, settings.jwt_reset_token_expire_minutes, "password_reset")
 
 
+def create_social_oauth_state(user_id: str) -> str:
+    return _encode_token(user_id, 10, "social_oauth")
+
+
 def decode_access_token(token: str) -> Optional[str]:
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
@@ -34,6 +38,16 @@ def decode_password_reset_token(token: str) -> Optional[str]:
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         if payload.get("type") != "password_reset":
+            return None
+        return payload.get("sub")
+    except JWTError:
+        return None
+
+
+def decode_social_oauth_state(token: str) -> Optional[str]:
+    try:
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        if payload.get("type") != "social_oauth":
             return None
         return payload.get("sub")
     except JWTError:

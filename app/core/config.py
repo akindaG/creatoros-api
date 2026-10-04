@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     jwt_reset_token_expire_minutes: int = 30
 
     frontend_origins: str = "http://localhost:3000"
+    frontend_url: str = "http://localhost:3000"
 
     ai_provider: str = "gemini"
     gemini_api_key: Optional[str] = None
@@ -35,6 +36,9 @@ class Settings(BaseSettings):
 
     social_publish_mode: str = "simulate"
     meta_graph_base_url: str = "https://graph.facebook.com/v23.0"
+    meta_app_id: Optional[str] = None
+    meta_app_secret: Optional[str] = None
+    meta_redirect_uri: Optional[str] = None
     social_token_encryption_key: Optional[str] = None
 
     cron_secret: Optional[str] = None
