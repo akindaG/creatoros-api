@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class SocialAccountCreate(BaseModel):
     platform: str = Field(min_length=2, max_length=20)
     account_name: str = Field(min_length=1, max_length=255)
+    platform_account_id: Optional[str] = Field(default=None, max_length=255)
     username: Optional[str] = Field(default=None, max_length=255)
     access_token: str = Field(min_length=1, max_length=10000)
     refresh_token: Optional[str] = Field(default=None, max_length=10000)
@@ -17,6 +18,7 @@ class SocialAccountCreate(BaseModel):
 class SocialAccountResponse(BaseModel):
     id: UUID
     platform: str
+    platform_account_id: Optional[str] = None
     account_name: str
     username: Optional[str] = None
     created_at: datetime
