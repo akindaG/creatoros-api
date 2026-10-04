@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +19,16 @@ from app.api.routes.social_accounts import router as social_accounts_router
 from app.api.routes.users import router as users_router
 from app.core.config import settings
 from app.core.database import get_db
+from app.services.exact_scheduler import scheduler_status, start_exact_scheduler, stop_exact_scheduler
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await start_exact_scheduler()
+    try:
+        yield
+    finally:
+        await stop_exact_scheduler()
 
 
 app = FastAPI(
@@ -25,6 +37,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -66,7 +79,12 @@ def root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "service": "creatoros-api", "version": "1.0.0"}
+    return {
+        "status": "healthy",
+        "service": "creatoros-api",
+        "version": "1.0.0",
+        "scheduler": scheduler_status(),
+    }
 
 
 @app.get("/health/db")
