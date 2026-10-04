@@ -23,8 +23,15 @@ def publish_now(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
+    original_status = post.status
     result = publish_one(db, post, current_user.id)
     if result["status"] == "failed":
+        # Content Studio's Post Now action should be retry-safe. If an immediate
+        # publish of a draft fails, keep it as a draft instead of making it
+        # disappear from the editor's draft queue.
+        if original_status == "draft":
+            post.status = "draft"
+            db.commit()
         raise HTTPException(status_code=502, detail=f"Publish failed: {result['detail']}")
     return {"message": "Post published", **result}
 
