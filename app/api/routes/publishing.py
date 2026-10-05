@@ -6,11 +6,40 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.post import Post
+from app.models.social_account import SocialAccount
 from app.models.user import User
+from app.services.exact_scheduler import scheduler_status
 from app.services.publishing import process_due_posts, publish_one
+from app.services.social_publish import publish_mode
 
 
 router = APIRouter(prefix="/api/v1/publishing", tags=["Publishing"])
+
+
+@router.get("/readiness")
+def publishing_readiness(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    facebook = (
+        db.query(SocialAccount)
+        .filter(
+            SocialAccount.user_id == current_user.id,
+            SocialAccount.platform == "facebook",
+            SocialAccount.status == "connected",
+        )
+        .first()
+    )
+    mode = publish_mode()
+    return {
+        "mode": mode,
+        "live": mode == "live",
+        "scheduler": scheduler_status(),
+        "facebook_connected": facebook is not None,
+        "facebook_page_id": facebook.platform_account_id if facebook else None,
+        "facebook_page_name": facebook.account_name if facebook else None,
+        "target_type": "facebook_page",
+    }
 
 
 @router.post("/posts/{post_id}")

@@ -278,3 +278,61 @@ def test_live_facebook_video_publish_uses_videos_endpoint(client, auth_headers, 
     assert captured["data"]["description"] == "CreatorOS end-to-end publishing test."
     assert captured["data"]["access_token"] == "video-page-token"
     assert captured["timeout"] == 60
+
+
+def test_publish_mode_is_normalized(client, auth_headers, monkeypatch):
+    social = client.post(
+        "/api/v1/social-accounts",
+        headers=auth_headers,
+        json={
+            "platform": "facebook",
+            "platform_account_id": "normalized-page-id",
+            "account_name": "Normalized Page",
+            "access_token": "normalized-token",
+        },
+    )
+    assert social.status_code == 201, social.text
+    post = _create_post(client, auth_headers)
+
+    monkeypatch.setattr(settings, "social_publish_mode", " LIVE ")
+
+    captured = {}
+
+    def fake_post(url, data=None, timeout=30):
+        captured["url"] = url
+        return FakeResponse({"id": "normalized-post-id"})
+
+    import app.services.social_publish as social_publish
+
+    monkeypatch.setattr(social_publish.httpx, "post", fake_post)
+
+    response = client.post(f"/api/v1/publishing/posts/{post['id']}", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["mode"] == "live"
+    assert captured["url"].endswith("/normalized-page-id/feed")
+
+
+def test_publishing_readiness_reports_page_and_mode(client, auth_headers, monkeypatch):
+    social = client.post(
+        "/api/v1/social-accounts",
+        headers=auth_headers,
+        json={
+            "platform": "facebook",
+            "platform_account_id": "readiness-page-id",
+            "account_name": "Readiness Page",
+            "access_token": "readiness-token",
+        },
+    )
+    assert social.status_code == 201, social.text
+    monkeypatch.setattr(settings, "social_publish_mode", "live")
+
+    response = client.get("/api/v1/publishing/readiness", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["live"] is True
+    assert payload["mode"] == "live"
+    assert payload["facebook_connected"] is True
+    assert payload["facebook_page_id"] == "readiness-page-id"
+    assert payload["facebook_page_name"] == "Readiness Page"
+    assert payload["target_type"] == "facebook_page"
+    assert "running" in payload["scheduler"]
