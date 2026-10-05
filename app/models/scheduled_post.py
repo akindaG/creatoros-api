@@ -8,7 +8,7 @@ class ScheduledPost(Base):
     __tablename__ = "scheduled_posts"
     __table_args__ = (
         CheckConstraint(
-            "platform IN ('instagram', 'facebook')",
+            "platform IN ('instagram', 'facebook', 'facebook_profile')",
             name="scheduled_posts_platform_check",
         ),
         Index("idx_scheduled_posts_time", "schedule_time"),
