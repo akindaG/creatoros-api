@@ -14,6 +14,10 @@ class PublishError(RuntimeError):
     pass
 
 
+def publish_mode() -> str:
+    return settings.social_publish_mode.strip().lower()
+
+
 def _is_video_url(value: str | None) -> bool:
     if not value:
         return False
@@ -29,7 +33,7 @@ def publish_post(db: Session, post: Post, user_id) -> dict:
     if not account:
         raise PublishError(f"No connected {post.platform} account")
 
-    if settings.social_publish_mode != "live":
+    if publish_mode() != "live":
         return {
             "platform": post.platform,
             "external_id": f"sim_{uuid.uuid4().hex[:16]}",
