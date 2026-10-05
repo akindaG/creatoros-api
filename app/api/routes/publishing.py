@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.post import Post
+from app.models.scheduled_post import ScheduledPost
 from app.models.social_account import SocialAccount
 from app.models.user import User
 from app.services.exact_scheduler import scheduler_status
@@ -39,6 +40,7 @@ def publishing_readiness(
         "facebook_page_id": facebook.platform_account_id if facebook else None,
         "facebook_page_name": facebook.account_name if facebook else None,
         "target_type": "facebook_page",
+        "facebook_profile_manual_share": True,
     }
 
 
@@ -51,6 +53,11 @@ def publish_now(
     post = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+    if post.platform == "facebook_profile":
+        raise HTTPException(
+            status_code=400,
+            detail="Personal Facebook profiles require manual sharing. Use the CreatorOS manual-share workflow instead.",
+        )
 
     original_status = post.status
     result = publish_one(db, post, current_user.id)
@@ -63,6 +70,30 @@ def publish_now(
             db.commit()
         raise HTTPException(status_code=502, detail=f"Publish failed: {result['detail']}")
     return {"message": "Post published", **result}
+
+
+@router.post("/posts/{post_id}/mark-shared")
+def mark_profile_post_shared(
+    post_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    post = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post.platform != "facebook_profile":
+        raise HTTPException(status_code=400, detail="Only Facebook profile manual-share posts can be marked shared")
+
+    post.status = "shared"
+    schedule = db.query(ScheduledPost).filter(ScheduledPost.post_id == post.id).first()
+    if schedule:
+        schedule.publish_state = "shared"
+    db.commit()
+    return {
+        "message": "Facebook profile post marked as shared",
+        "status": "shared",
+        "post_id": str(post.id),
+    }
 
 
 @router.post("/process-due")
