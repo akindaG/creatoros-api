@@ -11,8 +11,9 @@ from app.models.post import Post
 from app.models.scheduled_post import ScheduledPost
 from app.models.social_account import SocialAccount
 from app.models.user import User
-from app.schemas.scheduling import CalendarItem, ScheduleRequest, ScheduleResponse
+from app.schemas.scheduling import CalendarItem, MultiScheduleRequest, ScheduleRequest, ScheduleResponse
 from app.services.exact_scheduler import notify_schedule_changed
+from app.services.post_fanout import fan_out_post, normalize_auto_platforms, require_connected_platforms
 
 
 router = APIRouter(prefix="/api/v1", tags=["Scheduling"])
@@ -59,6 +60,77 @@ def schedule_post(post_id: UUID, data: ScheduleRequest, db: Session = Depends(ge
     db.refresh(schedule)
     notify_schedule_changed()
     return schedule
+
+
+@router.post("/posts/{post_id}/schedule-multi")
+def schedule_post_multi(
+    post_id: UUID,
+    data: MultiScheduleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    post = _owned_post(db, current_user.id, post_id)
+    if post.status not in {"draft", "failed"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Multi-platform scheduling is available for draft or failed posts",
+        )
+
+    schedule_time = data.schedule_time
+    if schedule_time.tzinfo is None:
+        schedule_time = schedule_time.replace(tzinfo=timezone.utc)
+    if schedule_time <= datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Schedule time must be in the future",
+        )
+
+    platforms = normalize_auto_platforms(data.platforms)
+    require_connected_platforms(db, current_user.id, platforms)
+    if "instagram" in platforms and not post.media_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Instagram scheduling requires an image or video",
+        )
+
+    posts = fan_out_post(
+        db,
+        post,
+        platforms=platforms,
+        status="scheduled",
+        scheduled_time=schedule_time,
+    )
+    schedules: list[ScheduledPost] = []
+    for platform_post in posts:
+        schedule = ScheduledPost(
+            post_id=platform_post.id,
+            schedule_time=schedule_time,
+            platform=platform_post.platform,
+            publish_state="scheduled",
+        )
+        db.add(schedule)
+        schedules.append(schedule)
+
+    db.commit()
+    for schedule in schedules:
+        db.refresh(schedule)
+    notify_schedule_changed()
+
+    return {
+        "message": f"Scheduled to {len(schedules)} platform(s)",
+        "schedule_time": schedule_time,
+        "count": len(schedules),
+        "items": [
+            {
+                "id": str(schedule.id),
+                "post_id": str(schedule.post_id),
+                "schedule_time": schedule.schedule_time,
+                "publish_state": schedule.publish_state,
+                "platform": schedule.platform,
+            }
+            for schedule in schedules
+        ],
+    }
 
 
 @router.put("/posts/{post_id}/schedule", response_model=ScheduleResponse)
