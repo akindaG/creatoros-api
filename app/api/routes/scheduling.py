@@ -146,7 +146,7 @@ def _owned_schedule_group(db: Session, user_id, group_id: UUID):
             ScheduledPost.schedule_group_id == group_id,
             Post.user_id == user_id,
         )
-        .order_by(ScheduledPost.platform.asc())
+        .order_by(Post.created_at.asc(), Post.id.asc())
         .all()
     )
     if not rows:
@@ -199,10 +199,16 @@ def cancel_schedule_group(
     current_user: User = Depends(get_current_user),
 ):
     rows = _owned_schedule_group(db, current_user.id, group_id)
-    for schedule, post in rows:
+    for index, (schedule, post) in enumerate(rows):
         db.delete(schedule)
-        post.status = "draft"
-        post.scheduled_time = None
+        if index == 0:
+            # Collapse a cancelled cross-post back to one reusable draft instead
+            # of leaving duplicate platform copies in the user's draft queue.
+            post.status = "draft"
+            post.scheduled_time = None
+            post.platform = rows[0][0].platform
+        else:
+            db.delete(post)
     db.commit()
     notify_schedule_changed()
     return {
