@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     meta_app_id: Optional[str] = None
     meta_app_secret: Optional[str] = None
     meta_redirect_uri: Optional[str] = None
+
+    # Instagram API with Instagram Login (Business Login). These may reuse the
+    # same Meta app credentials, but separate variables keep production setup
+    # explicit and allow Meta to issue a dedicated Instagram App ID/secret.
+    instagram_app_id: Optional[str] = None
+    instagram_app_secret: Optional[str] = None
+    instagram_redirect_uri: Optional[str] = None
+    instagram_graph_base_url: str = "https://graph.instagram.com/v26.0"
+    instagram_oauth_authorize_url: str = "https://www.instagram.com/oauth/authorize"
+    instagram_oauth_token_url: str = "https://api.instagram.com/oauth/access_token"
+    instagram_scopes: str = "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_insights"
+
     social_token_encryption_key: Optional[str] = None
 
     cron_secret: Optional[str] = None
