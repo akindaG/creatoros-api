@@ -574,3 +574,128 @@ def test_facebook_profile_can_be_marked_shared(client, auth_headers):
         assert schedule.publish_state == "shared"
     finally:
         db.close()
+
+
+def test_multi_platform_schedule_creates_same_timestamp_for_connected_channels(client, auth_headers):
+    facebook = client.post(
+        "/api/v1/social-accounts",
+        headers=auth_headers,
+        json={
+            "platform": "facebook",
+            "platform_account_id": "multi-page-id",
+            "account_name": "Multi Page",
+            "access_token": "multi-page-token",
+        },
+    )
+    assert facebook.status_code == 201, facebook.text
+    instagram = client.post(
+        "/api/v1/social-accounts",
+        headers=auth_headers,
+        json={
+            "platform": "instagram",
+            "platform_account_id": "17841411111111111",
+            "account_name": "Multi Instagram",
+            "username": "multi_creator",
+            "access_token": "multi-instagram-token",
+        },
+    )
+    assert instagram.status_code == 201, instagram.text
+
+    post = _create_post(
+        client,
+        auth_headers,
+        platform="instagram",
+        media_url="https://cdn.example.com/multi-image.jpg",
+    )
+    schedule_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+    response = client.post(
+        f"/api/v1/posts/{post['id']}/schedule-multi",
+        headers=auth_headers,
+        json={
+            "schedule_time": schedule_at.isoformat(),
+            "platforms": ["instagram", "facebook"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["count"] == 2
+    assert {item["platform"] for item in payload["items"]} == {"instagram", "facebook"}
+    assert len({item["schedule_time"] for item in payload["items"]}) == 1
+
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(ScheduledPost, Post)
+            .join(Post, Post.id == ScheduledPost.post_id)
+            .filter(Post.title == "CreatorOS QA post", Post.status == "scheduled")
+            .all()
+        )
+        matching = [(schedule, row) for schedule, row in rows if row.platform in {"instagram", "facebook"}]
+        assert len(matching) >= 2
+        times = {schedule.schedule_time for schedule, _ in matching}
+        assert len(times) == 1
+    finally:
+        db.close()
+
+
+def test_multi_platform_post_now_fans_out_to_instagram_and_facebook(client, auth_headers, monkeypatch):
+    facebook = client.post(
+        "/api/v1/social-accounts",
+        headers=auth_headers,
+        json={
+            "platform": "facebook",
+            "platform_account_id": "fanout-page-id",
+            "account_name": "Fanout Page",
+            "access_token": "fanout-page-token",
+        },
+    )
+    assert facebook.status_code == 201, facebook.text
+    instagram = client.post(
+        "/api/v1/social-accounts",
+        headers=auth_headers,
+        json={
+            "platform": "instagram",
+            "platform_account_id": "17841422222222222",
+            "account_name": "Fanout Instagram",
+            "username": "fanout_creator",
+            "access_token": "fanout-instagram-token",
+        },
+    )
+    assert instagram.status_code == 201, instagram.text
+
+    post = _create_post(
+        client,
+        auth_headers,
+        platform="instagram",
+        media_url="https://cdn.example.com/fanout-image.jpg",
+    )
+    monkeypatch.setattr(settings, "social_publish_mode", "live")
+    calls = []
+
+    def fake_post(url, data=None, timeout=30):
+        calls.append((url, data, timeout))
+        if url.endswith("/media_publish"):
+            return FakeResponse({"id": "ig-published-id"})
+        if "graph.instagram.com" in url and url.endswith("/media"):
+            return FakeResponse({"id": "ig-container-id"})
+        if url.endswith("/fanout-page-id/photos"):
+            return FakeResponse({"id": "fb-published-id"})
+        raise AssertionError(f"Unexpected multi-platform publish URL: {url}")
+
+    import app.services.social_publish as social_publish
+
+    monkeypatch.setattr(social_publish.httpx, "post", fake_post)
+
+    response = client.post(
+        f"/api/v1/publishing/posts/{post['id']}/multi",
+        headers=auth_headers,
+        json={"platforms": ["instagram", "facebook"]},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "published"
+    assert payload["published"] == 2
+    assert payload["failed"] == 0
+    assert {item["platform"] for item in payload["results"]} == {"instagram", "facebook"}
+    assert any("graph.instagram.com" in url and url.endswith("/media") for url, _, _ in calls)
+    assert any(url.endswith("/fanout-page-id/photos") for url, _, _ in calls)
