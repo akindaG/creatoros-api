@@ -34,3 +34,7 @@ class PostUpdate(BaseModel):
     platform: Optional[str] = Field(default=None, max_length=20)
     status: Optional[str] = Field(default=None, max_length=30)
     scheduled_time: Optional[datetime] = None
+
+
+class MultiPublishRequest(BaseModel):
+    platforms: list[str] = Field(min_length=1, max_length=2)

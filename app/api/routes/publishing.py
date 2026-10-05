@@ -9,8 +9,10 @@ from app.models.post import Post
 from app.models.scheduled_post import ScheduledPost
 from app.models.social_account import SocialAccount
 from app.models.user import User
+from app.schemas.post import MultiPublishRequest
 from app.services.exact_scheduler import scheduler_status
 from app.services.publishing import process_due_posts, publish_one
+from app.services.post_fanout import fan_out_post, normalize_auto_platforms, require_connected_platforms
 from app.services.social_publish import publish_mode
 
 
@@ -83,6 +85,70 @@ def publish_now(
             db.commit()
         raise HTTPException(status_code=502, detail=f"Publish failed: {result['detail']}")
     return {"message": "Post published", **result}
+
+
+@router.post("/posts/{post_id}/multi")
+def publish_now_multi(
+    post_id: UUID,
+    data: MultiPublishRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    post = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post.status not in {"draft", "failed"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Multi-platform publishing is available for draft or failed posts",
+        )
+
+    platforms = normalize_auto_platforms(data.platforms)
+    require_connected_platforms(db, current_user.id, platforms)
+    if "instagram" in platforms and not post.media_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Instagram publishing requires an image or video",
+        )
+
+    posts = fan_out_post(
+        db,
+        post,
+        platforms=platforms,
+        status="draft",
+        scheduled_time=None,
+    )
+    db.commit()
+
+    results: list[dict] = []
+    for platform_post in posts:
+        result = publish_one(db, platform_post, current_user.id)
+        if result["status"] == "failed":
+            # Keep a retryable draft for the platform that failed while allowing
+            # successful platforms to remain published.
+            platform_post.status = "draft"
+            db.commit()
+        results.append(
+            {
+                "post_id": str(platform_post.id),
+                "platform": platform_post.platform,
+                **result,
+            }
+        )
+
+    published = sum(1 for item in results if item["status"] == "published")
+    failed = len(results) - published
+    overall = "published" if failed == 0 else "failed" if published == 0 else "partial"
+    modes = {item.get("mode") for item in results if item.get("mode")}
+
+    return {
+        "message": f"Processed {len(results)} platform(s)",
+        "status": overall,
+        "mode": modes.pop() if len(modes) == 1 else "mixed",
+        "published": published,
+        "failed": failed,
+        "results": results,
+    }
 
 
 @router.post("/posts/{post_id}/mark-shared")
