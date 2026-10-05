@@ -619,8 +619,10 @@ def test_multi_platform_schedule_creates_same_timestamp_for_connected_channels(c
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["count"] == 2
+    assert payload["schedule_group_id"]
     assert {item["platform"] for item in payload["items"]} == {"instagram", "facebook"}
     assert len({item["schedule_time"] for item in payload["items"]}) == 1
+    assert {item["schedule_group_id"] for item in payload["items"]} == {payload["schedule_group_id"]}
 
     db = SessionLocal()
     try:
@@ -634,8 +636,44 @@ def test_multi_platform_schedule_creates_same_timestamp_for_connected_channels(c
         assert len(matching) >= 2
         times = {schedule.schedule_time for schedule, _ in matching}
         assert len(times) == 1
+        group_ids = {str(schedule.schedule_group_id) for schedule, _ in matching}
+        assert payload["schedule_group_id"] in group_ids
     finally:
         db.close()
+
+    rescheduled_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+    rescheduled = client.put(
+        f"/api/v1/schedule-groups/{payload['schedule_group_id']}",
+        headers=auth_headers,
+        json={"schedule_time": rescheduled_at.isoformat()},
+    )
+    assert rescheduled.status_code == 200, rescheduled.text
+    assert rescheduled.json()["count"] == 2
+
+    calendar = client.get("/api/v1/calendar", headers=auth_headers)
+    assert calendar.status_code == 200, calendar.text
+    grouped = [
+        item
+        for item in calendar.json()
+        if item["schedule_group_id"] == payload["schedule_group_id"]
+    ]
+    assert len(grouped) == 2
+    assert len({item["schedule_time"] for item in grouped}) == 1
+
+    cancelled = client.delete(
+        f"/api/v1/schedule-groups/{payload['schedule_group_id']}",
+        headers=auth_headers,
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["count"] == 2
+
+    calendar_after_cancel = client.get("/api/v1/calendar", headers=auth_headers)
+    assert calendar_after_cancel.status_code == 200, calendar_after_cancel.text
+    assert not [
+        item
+        for item in calendar_after_cancel.json()
+        if item["schedule_group_id"] == payload["schedule_group_id"]
+    ]
 
 
 def test_multi_platform_post_now_fans_out_to_instagram_and_facebook(client, auth_headers, monkeypatch):
