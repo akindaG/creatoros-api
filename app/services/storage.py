@@ -129,33 +129,16 @@ def upload_media(filename: str, content_type: str, data: bytes, user_id: str) ->
 
 
 def prepare_instagram_image(media_url: str, user_id: str) -> str:
-    """Return a public JPEG URL that satisfies Instagram image constraints.
+    """Return a public JPEG URL suitable for Instagram publishing.
 
-    New CreatorOS uploads are already normalized. This function also repairs
-    older PNG/WebP or out-of-spec images that were saved before normalization
-    was introduced, so existing drafts can be retried without re-uploading.
+    New CreatorOS uploads are normalized before storage. Older PNG/WebP assets
+    are repaired lazily here so existing drafts keep working after deployment.
+    Existing JPEG URLs are kept unchanged to avoid an unnecessary extra
+    download on every publish.
     """
     parsed = urlparse(media_url)
     if parsed.path.lower().endswith((".jpg", ".jpeg")):
-        try:
-            response = httpx.get(media_url, follow_redirects=True, timeout=30)
-            response.raise_for_status()
-            raw = response.content
-            with Image.open(io.BytesIO(raw)) as image:
-                width, height = image.size
-                image_format = (image.format or "").upper()
-            if (
-                image_format == "JPEG"
-                and len(raw) <= INSTAGRAM_MAX_IMAGE_BYTES
-                and INSTAGRAM_MIN_WIDTH <= width <= INSTAGRAM_MAX_WIDTH
-                and height > 0
-                and INSTAGRAM_MIN_ASPECT <= width / height <= INSTAGRAM_MAX_ASPECT
-            ):
-                return media_url
-        except (httpx.HTTPError, OSError, ValueError):
-            # Fall through to the explicit normalization path below so the
-            # caller receives one useful error if the public URL is unusable.
-            pass
+        return media_url
 
     try:
         response = httpx.get(media_url, follow_redirects=True, timeout=30)
