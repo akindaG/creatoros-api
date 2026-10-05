@@ -13,13 +13,13 @@ from app.schemas.post import PostCreate, PostResponse, PostUpdate
 
 
 router = APIRouter(prefix="/api/v1/posts", tags=["Posts"])
-SUPPORTED_STATUSES = {"draft", "scheduled", "queued", "published", "failed"}
+SUPPORTED_STATUSES = {"draft", "scheduled", "queued", "published", "failed", "ready_to_share", "shared"}
 
 
 def _normalize_platform(value: str) -> str:
     platform = value.strip().lower()
-    if platform not in {"instagram", "facebook"}:
-        raise HTTPException(status_code=400, detail="Platform must be instagram or facebook")
+    if platform not in {"instagram", "facebook", "facebook_profile"}:
+        raise HTTPException(status_code=400, detail="Platform must be instagram, facebook, or facebook_profile")
     return platform
 
 
