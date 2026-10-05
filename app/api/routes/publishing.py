@@ -31,6 +31,15 @@ def publishing_readiness(
         )
         .first()
     )
+    instagram = (
+        db.query(SocialAccount)
+        .filter(
+            SocialAccount.user_id == current_user.id,
+            SocialAccount.platform == "instagram",
+            SocialAccount.status == "connected",
+        )
+        .first()
+    )
     mode = publish_mode()
     return {
         "mode": mode,
@@ -39,6 +48,10 @@ def publishing_readiness(
         "facebook_connected": facebook is not None,
         "facebook_page_id": facebook.platform_account_id if facebook else None,
         "facebook_page_name": facebook.account_name if facebook else None,
+        "instagram_connected": instagram is not None,
+        "instagram_account_id": instagram.platform_account_id if instagram else None,
+        "instagram_username": instagram.username if instagram else None,
+        "instagram_token_expires_at": instagram.token_expires_at if instagram else None,
         "target_type": "facebook_page",
         "facebook_profile_manual_share": True,
     }
