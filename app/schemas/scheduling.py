@@ -20,6 +20,7 @@ class MultiScheduleRequest(BaseModel):
 class ScheduleResponse(BaseModel):
     id: UUID
     post_id: UUID
+    schedule_group_id: Optional[UUID] = None
     schedule_time: datetime
     publish_state: str
     platform: str
@@ -30,6 +31,7 @@ class ScheduleResponse(BaseModel):
 class CalendarItem(BaseModel):
     schedule_id: UUID
     post_id: UUID
+    schedule_group_id: Optional[UUID] = None
     title: str
     platform: str
     status: str
