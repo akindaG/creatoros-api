@@ -11,6 +11,10 @@ class ScheduledPost(Base):
             "platform IN ('instagram', 'facebook', 'facebook_profile')",
             name="scheduled_posts_platform_check",
         ),
+        CheckConstraint(
+            "publish_state IN ('scheduled', 'queued', 'published', 'failed', 'ready_to_share', 'shared')",
+            name="scheduled_posts_publish_state_check",
+        ),
         Index("idx_scheduled_posts_time", "schedule_time"),
         Index("idx_scheduled_posts_state_time", "publish_state", "schedule_time"),
     )
