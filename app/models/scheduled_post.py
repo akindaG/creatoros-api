@@ -17,6 +17,7 @@ class ScheduledPost(Base):
         ),
         Index("idx_scheduled_posts_time", "schedule_time"),
         Index("idx_scheduled_posts_state_time", "publish_state", "schedule_time"),
+        Index("idx_scheduled_posts_group", "schedule_group_id"),
     )
 
     id = Column(
@@ -30,6 +31,7 @@ class ScheduledPost(Base):
         nullable=False,
         unique=True,
     )
+    schedule_group_id = Column(UUID(as_uuid=True), nullable=True)
     schedule_time = Column(DateTime(timezone=True), nullable=False)
     publish_state = Column(
         String(30),
