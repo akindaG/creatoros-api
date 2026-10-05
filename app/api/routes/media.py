@@ -17,5 +17,8 @@ async def upload(file: UploadFile = File(...), current_user: User = Depends(get_
     data = await file.read()
     if len(data) > settings.max_upload_mb * 1024 * 1024:
         raise HTTPException(status_code=413, detail=f"File exceeds {settings.max_upload_mb} MB limit")
-    result = upload_media(file.filename or "upload", content_type, data, str(current_user.id))
+    try:
+        result = upload_media(file.filename or "upload", content_type, data, str(current_user.id))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"message": "Upload successful", **result}
