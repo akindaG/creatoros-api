@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -9,7 +10,11 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.post import Post
 from app.models.social_account import SocialAccount
+from app.services.storage import prepare_instagram_image
 from app.services.token_crypto import decrypt_token, encrypt_token
+
+
+logger = logging.getLogger(__name__)
 
 
 class PublishError(RuntimeError):
@@ -182,8 +187,18 @@ def publish_post(db: Session, post: Post, user_id) -> dict:
                     "access_token": access_token,
                 }
             else:
+                try:
+                    instagram_image_url = prepare_instagram_image(
+                        str(post.media_url),
+                        str(user_id),
+                    )
+                except ValueError as exc:
+                    raise PublishError(str(exc)) from exc
+                if instagram_image_url != post.media_url:
+                    post.media_url = instagram_image_url
+                    db.flush()
                 create_data = {
-                    "image_url": post.media_url,
+                    "image_url": instagram_image_url,
                     "caption": post.caption or post.title,
                     "access_token": access_token,
                 }
@@ -198,8 +213,10 @@ def publish_post(db: Session, post: Post, user_id) -> dict:
             if not creation_id:
                 raise PublishError("Instagram did not return a media container ID")
 
-            if _is_video_url(post.media_url):
-                _wait_for_instagram_container(base, str(creation_id), access_token)
+            # Meta can return a container ID before the media is publishable.
+            # Poll readiness for images as well as reels to avoid intermittent
+            # media_publish failures immediately after container creation.
+            _wait_for_instagram_container(base, str(creation_id), access_token)
 
             publish = httpx.post(
                 f"{base}/{platform_account_id}/media_publish",
@@ -216,6 +233,18 @@ def publish_post(db: Session, post: Post, user_id) -> dict:
         raise PublishError("Unsupported platform")
     except httpx.HTTPStatusError as exc:
         detail = exc.response.text[:500] if exc.response is not None else str(exc)
+        logger.warning(
+            "Meta publish HTTP failure platform=%s post_id=%s detail=%s",
+            post.platform,
+            post.id,
+            detail,
+        )
         raise PublishError(f"Meta API request failed: {detail}") from exc
     except httpx.HTTPError as exc:
+        logger.warning(
+            "Meta publish network failure platform=%s post_id=%s detail=%s",
+            post.platform,
+            post.id,
+            exc,
+        )
         raise PublishError(f"Meta API request failed: {exc}") from exc

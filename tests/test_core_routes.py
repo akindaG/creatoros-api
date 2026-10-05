@@ -1,3 +1,7 @@
+import io
+
+from PIL import Image
+
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -129,10 +133,21 @@ def test_media_upload_and_type_validation(client, auth_headers, monkeypatch, tmp
     )
     assert rejected.status_code == 415
 
-    uploaded = client.post(
+    invalid_image = client.post(
         "/api/v1/media/upload",
         headers=auth_headers,
         files={"file": ("photo.png", b"fake-png-bytes", "image/png")},
+    )
+    assert invalid_image.status_code == 400
+
+    image = Image.new("RGB", (640, 640), "white")
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+
+    uploaded = client.post(
+        "/api/v1/media/upload",
+        headers=auth_headers,
+        files={"file": ("photo.png", buffer.getvalue(), "image/png")},
     )
     assert uploaded.status_code == 201, uploaded.text
     payload = uploaded.json()

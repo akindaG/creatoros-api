@@ -252,9 +252,15 @@ def test_live_instagram_image_publish_uses_instagram_graph(client, auth_headers,
             return FakeResponse({"id": "18000000000000000"})
         raise AssertionError(f"Unexpected Instagram publish URL: {url}")
 
+    def fake_get(url, params=None, timeout=30):
+        if url.endswith("/18000000000000000"):
+            return FakeResponse({"status_code": "FINISHED", "status": "Finished"})
+        raise AssertionError(f"Unexpected Instagram status URL: {url}")
+
     import app.services.social_publish as social_publish
 
     monkeypatch.setattr(social_publish.httpx, "post", fake_post)
+    monkeypatch.setattr(social_publish.httpx, "get", fake_get)
 
     published = client.post(f"/api/v1/publishing/posts/{post['id']}", headers=auth_headers)
     assert published.status_code == 200, published.text
@@ -676,6 +682,111 @@ def test_multi_platform_schedule_creates_same_timestamp_for_connected_channels(c
     ]
 
 
+def test_due_multi_platform_schedule_publishes_both_channels(client, auth_headers, monkeypatch):
+    facebook = client.post(
+        "/api/v1/social-accounts",
+        headers=auth_headers,
+        json={
+            "platform": "facebook",
+            "platform_account_id": "due-multi-page-id",
+            "account_name": "Due Multi Page",
+            "access_token": "due-multi-page-token",
+        },
+    )
+    assert facebook.status_code == 201, facebook.text
+    instagram = client.post(
+        "/api/v1/social-accounts",
+        headers=auth_headers,
+        json={
+            "platform": "instagram",
+            "platform_account_id": "17841433333333333",
+            "account_name": "Due Multi Instagram",
+            "username": "due_multi_creator",
+            "access_token": "due-multi-instagram-token",
+        },
+    )
+    assert instagram.status_code == 201, instagram.text
+
+    post = _create_post(
+        client,
+        auth_headers,
+        platform="instagram",
+        media_url="https://cdn.example.com/due-multi.jpg",
+    )
+    schedule_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    scheduled = client.post(
+        f"/api/v1/posts/{post['id']}/schedule-multi",
+        headers=auth_headers,
+        json={
+            "schedule_time": schedule_at.isoformat(),
+            "platforms": ["instagram", "facebook"],
+        },
+    )
+    assert scheduled.status_code == 200, scheduled.text
+    group_id = scheduled.json()["schedule_group_id"]
+
+    db = SessionLocal()
+    try:
+        schedules = (
+            db.query(ScheduledPost)
+            .filter(ScheduledPost.schedule_group_id == group_id)
+            .all()
+        )
+        assert len(schedules) == 2
+        for schedule in schedules:
+            schedule.schedule_time = datetime.now(timezone.utc) - timedelta(seconds=1)
+        db.commit()
+    finally:
+        db.close()
+
+    monkeypatch.setattr(settings, "social_publish_mode", "live")
+    calls = []
+
+    def fake_post(url, data=None, timeout=30):
+        calls.append(url)
+        if url.endswith("/media_publish"):
+            return FakeResponse({"id": "ig-due-published-id"})
+        if "graph.instagram.com" in url and url.endswith("/media"):
+            return FakeResponse({"id": "ig-due-container-id"})
+        if url.endswith("/due-multi-page-id/photos"):
+            return FakeResponse({"id": "fb-due-published-id"})
+        raise AssertionError(f"Unexpected due multi-platform publish URL: {url}")
+
+    def fake_get(url, params=None, timeout=30):
+        if url.endswith("/ig-due-container-id"):
+            return FakeResponse({"status_code": "FINISHED", "status": "Finished"})
+        raise AssertionError(f"Unexpected due multi-platform status URL: {url}")
+
+    import app.services.social_publish as social_publish
+
+    monkeypatch.setattr(social_publish.httpx, "post", fake_post)
+    monkeypatch.setattr(social_publish.httpx, "get", fake_get)
+
+    processed = client.post("/api/v1/publishing/process-due", headers=auth_headers)
+    assert processed.status_code == 200, processed.text
+    payload = processed.json()
+    assert payload["processed"] == 2
+    assert payload["published"] == 2
+    assert payload["failed"] == 0
+    assert any("graph.instagram.com" in url and url.endswith("/media") for url in calls)
+    assert any(url.endswith("/due-multi-page-id/photos") for url in calls)
+
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(ScheduledPost, Post)
+            .join(Post, Post.id == ScheduledPost.post_id)
+            .filter(ScheduledPost.schedule_group_id == group_id)
+            .all()
+        )
+        assert len(rows) == 2
+        assert {schedule.publish_state for schedule, _ in rows} == {"published"}
+        assert {row.status for _, row in rows} == {"published"}
+        assert {row.platform for _, row in rows} == {"instagram", "facebook"}
+    finally:
+        db.close()
+
+
 def test_multi_platform_post_now_fans_out_to_instagram_and_facebook(client, auth_headers, monkeypatch):
     facebook = client.post(
         "/api/v1/social-accounts",
@@ -720,9 +831,15 @@ def test_multi_platform_post_now_fans_out_to_instagram_and_facebook(client, auth
             return FakeResponse({"id": "fb-published-id"})
         raise AssertionError(f"Unexpected multi-platform publish URL: {url}")
 
+    def fake_get(url, params=None, timeout=30):
+        if url.endswith("/ig-container-id"):
+            return FakeResponse({"status_code": "FINISHED", "status": "Finished"})
+        raise AssertionError(f"Unexpected multi-platform status URL: {url}")
+
     import app.services.social_publish as social_publish
 
     monkeypatch.setattr(social_publish.httpx, "post", fake_post)
+    monkeypatch.setattr(social_publish.httpx, "get", fake_get)
 
     response = client.post(
         f"/api/v1/publishing/posts/{post['id']}/multi",

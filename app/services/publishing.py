@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -6,6 +7,9 @@ from app.core.config import settings
 from app.models.post import Post
 from app.models.scheduled_post import ScheduledPost
 from app.services.social_publish import PublishError, publish_post
+
+
+logger = logging.getLogger(__name__)
 
 
 def publish_one(db: Session, post: Post, user_id) -> dict:
@@ -18,6 +22,13 @@ def publish_one(db: Session, post: Post, user_id) -> dict:
         db.commit()
         return {"status": "published", **result}
     except PublishError as exc:
+        logger.warning(
+            "Publish failed platform=%s post_id=%s user_id=%s detail=%s",
+            post.platform,
+            post.id,
+            user_id,
+            exc,
+        )
         post.status = "failed"
         schedule = db.query(ScheduledPost).filter(ScheduledPost.post_id == post.id).first()
         if schedule:
