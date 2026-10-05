@@ -29,10 +29,14 @@ def upgrade():
         "DROP CONSTRAINT IF EXISTS scheduled_posts_publish_state_check"
     )
     allowed = ", ".join(f"'{state}'" for state in ALLOWED_STATES)
+    # Production contains legacy schedule-state values created before the
+    # current state machine was standardized. NOT VALID preserves those old
+    # rows while immediately enforcing the current state set for new/updated
+    # rows. This lets the deployment recover without rewriting user data.
     op.execute(
         "ALTER TABLE scheduled_posts "
         "ADD CONSTRAINT scheduled_posts_publish_state_check "
-        f"CHECK (publish_state IN ({allowed}))"
+        f"CHECK (publish_state IN ({allowed})) NOT VALID"
     )
 
 
@@ -55,5 +59,5 @@ def downgrade():
     op.execute(
         "ALTER TABLE scheduled_posts "
         "ADD CONSTRAINT scheduled_posts_publish_state_check "
-        "CHECK (publish_state IN ('scheduled', 'published', 'failed'))"
+        "CHECK (publish_state IN ('scheduled', 'published', 'failed')) NOT VALID"
     )
