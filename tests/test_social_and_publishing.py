@@ -124,6 +124,148 @@ def test_facebook_oauth_connect_and_callback(client, auth_headers, monkeypatch):
     assert any(url.endswith("/me/accounts") for url, _ in calls)
 
 
+def test_instagram_oauth_connect_and_callback(client, auth_headers, monkeypatch):
+    monkeypatch.setattr(settings, "instagram_app_id", "instagram-app-id")
+    monkeypatch.setattr(settings, "instagram_app_secret", "instagram-app-secret")
+    monkeypatch.setattr(
+        settings,
+        "instagram_redirect_uri",
+        "https://api.example.com/api/v1/social-accounts/instagram/callback",
+    )
+    monkeypatch.setattr(settings, "frontend_url", "https://creatoros.example.com")
+    monkeypatch.setattr(settings, "instagram_graph_base_url", "https://graph.instagram.com/v26.0")
+    monkeypatch.setattr(
+        settings,
+        "instagram_scopes",
+        "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_insights",
+    )
+
+    connect = client.get("/api/v1/social-accounts/instagram/connect", headers=auth_headers)
+    assert connect.status_code == 200, connect.text
+    authorization_url = connect.json()["authorization_url"]
+    parsed = urlparse(authorization_url)
+    query = parse_qs(parsed.query)
+    state = query["state"][0]
+    assert parsed.netloc == "www.instagram.com"
+    assert query["client_id"][0] == "instagram-app-id"
+    assert "instagram_business_basic" in query["scope"][0]
+    assert "instagram_business_content_publish" in query["scope"][0]
+    assert "instagram_business_manage_insights" in query["scope"][0]
+
+    def fake_post(url, data=None, timeout=30):
+        assert url == settings.instagram_oauth_token_url
+        assert data["client_id"] == "instagram-app-id"
+        assert data["client_secret"] == "instagram-app-secret"
+        assert data["grant_type"] == "authorization_code"
+        return FakeResponse(
+            {
+                "access_token": "short-instagram-token",
+                "user_id": "17841400000000000",
+            }
+        )
+
+    def fake_get(url, params=None, timeout=30):
+        if url == "https://graph.instagram.com/access_token":
+            assert params["grant_type"] == "ig_exchange_token"
+            assert params["access_token"] == "short-instagram-token"
+            return FakeResponse(
+                {
+                    "access_token": "long-instagram-token",
+                    "expires_in": 5184000,
+                }
+            )
+        if url == "https://graph.instagram.com/v26.0/me":
+            assert params["access_token"] == "long-instagram-token"
+            return FakeResponse(
+                {
+                    "user_id": "17841400000000000",
+                    "username": "creatoros_test",
+                    "name": "CreatorOS Test",
+                    "account_type": "BUSINESS",
+                    "followers_count": 321,
+                    "media_count": 12,
+                }
+            )
+        raise AssertionError(f"Unexpected Instagram URL: {url}")
+
+    import app.api.routes.social_accounts as social_routes
+
+    monkeypatch.setattr(social_routes.httpx, "post", fake_post)
+    monkeypatch.setattr(social_routes.httpx, "get", fake_get)
+
+    callback = client.get(
+        "/api/v1/social-accounts/instagram/callback",
+        params={"code": "instagram-code", "state": state},
+        follow_redirects=False,
+    )
+    assert callback.status_code in {302, 307}
+    assert callback.headers["location"] == "https://creatoros.example.com/social-accounts?instagram=connected"
+
+    db = SessionLocal()
+    try:
+        account = (
+            db.query(SocialAccount)
+            .filter(SocialAccount.platform == "instagram")
+            .order_by(SocialAccount.created_at.desc())
+            .first()
+        )
+        assert account is not None
+        assert account.platform_account_id == "17841400000000000"
+        assert account.account_name == "CreatorOS Test"
+        assert account.username == "creatoros_test"
+        assert decrypt_token(account.access_token) == "long-instagram-token"
+        assert account.token_expires_at is not None
+    finally:
+        db.close()
+
+
+def test_live_instagram_image_publish_uses_instagram_graph(client, auth_headers, monkeypatch):
+    social = client.post(
+        "/api/v1/social-accounts",
+        headers=auth_headers,
+        json={
+            "platform": "instagram",
+            "platform_account_id": "17841400000000000",
+            "account_name": "CreatorOS Instagram",
+            "username": "creatoros_test",
+            "access_token": "live-instagram-token",
+        },
+    )
+    assert social.status_code == 201, social.text
+    post = _create_post(
+        client,
+        auth_headers,
+        platform="instagram",
+        media_url="https://cdn.example.com/creator-image.jpg",
+    )
+
+    monkeypatch.setattr(settings, "social_publish_mode", "live")
+    monkeypatch.setattr(settings, "instagram_graph_base_url", "https://graph.instagram.com/v26.0")
+
+    calls = []
+
+    def fake_post(url, data=None, timeout=30):
+        calls.append((url, data, timeout))
+        if url.endswith("/media_publish"):
+            return FakeResponse({"id": "17900000000000000"})
+        if url.endswith("/media"):
+            return FakeResponse({"id": "18000000000000000"})
+        raise AssertionError(f"Unexpected Instagram publish URL: {url}")
+
+    import app.services.social_publish as social_publish
+
+    monkeypatch.setattr(social_publish.httpx, "post", fake_post)
+
+    published = client.post(f"/api/v1/publishing/posts/{post['id']}", headers=auth_headers)
+    assert published.status_code == 200, published.text
+    assert published.json()["status"] == "published"
+    assert published.json()["mode"] == "live"
+    assert calls[0][0] == "https://graph.instagram.com/v26.0/17841400000000000/media"
+    assert calls[0][1]["image_url"] == "https://cdn.example.com/creator-image.jpg"
+    assert calls[0][1]["access_token"] == "live-instagram-token"
+    assert calls[1][0] == "https://graph.instagram.com/v26.0/17841400000000000/media_publish"
+
+
 def test_live_facebook_text_publish_uses_page_id(client, auth_headers, monkeypatch):
     social = client.post(
         "/api/v1/social-accounts",
