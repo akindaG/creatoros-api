@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -50,8 +50,9 @@ def schedule_post(post_id: UUID, data: ScheduleRequest, db: Session = Depends(ge
         schedule.schedule_time = schedule_time
         schedule.platform = platform
         schedule.publish_state = "scheduled"
+        schedule.schedule_group_id = None
     else:
-        schedule = ScheduledPost(post_id=post.id, schedule_time=schedule_time, platform=platform, publish_state="scheduled")
+        schedule = ScheduledPost(post_id=post.id, schedule_time=schedule_time, platform=platform, publish_state="scheduled", schedule_group_id=None)
         db.add(schedule)
     post.platform = platform
     post.scheduled_time = schedule_time
@@ -100,10 +101,12 @@ def schedule_post_multi(
         status="scheduled",
         scheduled_time=schedule_time,
     )
+    schedule_group_id = uuid4()
     schedules: list[ScheduledPost] = []
     for platform_post in posts:
         schedule = ScheduledPost(
             post_id=platform_post.id,
+            schedule_group_id=schedule_group_id,
             schedule_time=schedule_time,
             platform=platform_post.platform,
             publish_state="scheduled",
@@ -119,17 +122,93 @@ def schedule_post_multi(
     return {
         "message": f"Scheduled to {len(schedules)} platform(s)",
         "schedule_time": schedule_time,
+        "schedule_group_id": str(schedule_group_id),
         "count": len(schedules),
         "items": [
             {
                 "id": str(schedule.id),
                 "post_id": str(schedule.post_id),
+                "schedule_group_id": str(schedule.schedule_group_id) if schedule.schedule_group_id else None,
                 "schedule_time": schedule.schedule_time,
                 "publish_state": schedule.publish_state,
                 "platform": schedule.platform,
             }
             for schedule in schedules
         ],
+    }
+
+
+def _owned_schedule_group(db: Session, user_id, group_id: UUID):
+    rows = (
+        db.query(ScheduledPost, Post)
+        .join(Post, Post.id == ScheduledPost.post_id)
+        .filter(
+            ScheduledPost.schedule_group_id == group_id,
+            Post.user_id == user_id,
+        )
+        .order_by(ScheduledPost.platform.asc())
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Schedule group not found")
+    return rows
+
+
+@router.put("/schedule-groups/{group_id}")
+def reschedule_group(
+    group_id: UUID,
+    data: ScheduleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    schedule_time = data.schedule_time
+    if schedule_time.tzinfo is None:
+        schedule_time = schedule_time.replace(tzinfo=timezone.utc)
+    if schedule_time <= datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Schedule time must be in the future",
+        )
+
+    rows = _owned_schedule_group(db, current_user.id, group_id)
+    for schedule, post in rows:
+        if schedule.publish_state not in {"scheduled", "failed"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Only scheduled or failed schedule groups can be rescheduled",
+            )
+        schedule.schedule_time = schedule_time
+        schedule.publish_state = "scheduled"
+        post.scheduled_time = schedule_time
+        post.status = "scheduled"
+
+    db.commit()
+    notify_schedule_changed()
+    return {
+        "message": f"Updated {len(rows)} scheduled platform(s)",
+        "schedule_group_id": str(group_id),
+        "schedule_time": schedule_time,
+        "count": len(rows),
+    }
+
+
+@router.delete("/schedule-groups/{group_id}")
+def cancel_schedule_group(
+    group_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rows = _owned_schedule_group(db, current_user.id, group_id)
+    for schedule, post in rows:
+        db.delete(schedule)
+        post.status = "draft"
+        post.scheduled_time = None
+    db.commit()
+    notify_schedule_changed()
+    return {
+        "message": f"Cancelled {len(rows)} scheduled platform(s)",
+        "schedule_group_id": str(group_id),
+        "count": len(rows),
     }
 
 
@@ -184,6 +263,7 @@ def calendar(
         CalendarItem(
             schedule_id=schedule.id,
             post_id=post.id,
+            schedule_group_id=schedule.schedule_group_id,
             title=post.title,
             platform=schedule.platform,
             status=schedule.publish_state,
