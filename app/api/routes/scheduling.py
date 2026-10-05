@@ -34,15 +34,16 @@ def schedule_post(post_id: UUID, data: ScheduleRequest, db: Session = Depends(ge
     if schedule_time <= datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Schedule time must be in the future")
     platform = (data.platform or post.platform).lower()
-    if platform not in {"instagram", "facebook"}:
+    if platform not in {"instagram", "facebook", "facebook_profile"}:
         raise HTTPException(status_code=400, detail="Unsupported platform")
-    connected = db.query(SocialAccount).filter(
-        SocialAccount.user_id == current_user.id,
-        SocialAccount.platform == platform,
-        SocialAccount.status == "connected",
-    ).first()
-    if not connected:
-        raise HTTPException(status_code=400, detail=f"{platform.title()} account is not connected")
+    if platform != "facebook_profile":
+        connected = db.query(SocialAccount).filter(
+            SocialAccount.user_id == current_user.id,
+            SocialAccount.platform == platform,
+            SocialAccount.status == "connected",
+        ).first()
+        if not connected:
+            raise HTTPException(status_code=400, detail=f"{platform.title()} account is not connected")
     schedule = db.query(ScheduledPost).filter(ScheduledPost.post_id == post.id).first()
     if schedule:
         schedule.schedule_time = schedule_time

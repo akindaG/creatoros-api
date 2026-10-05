@@ -336,3 +336,99 @@ def test_publishing_readiness_reports_page_and_mode(client, auth_headers, monkey
     assert payload["facebook_page_name"] == "Readiness Page"
     assert payload["target_type"] == "facebook_page"
     assert "running" in payload["scheduler"]
+
+
+def test_facebook_profile_manual_share_schedule_does_not_require_page_connection(client, auth_headers):
+    post = _create_post(client, auth_headers, platform="facebook_profile")
+    schedule_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    scheduled = client.post(
+        f"/api/v1/posts/{post['id']}/schedule",
+        headers=auth_headers,
+        json={
+            "schedule_time": schedule_at.isoformat(),
+            "platform": "facebook_profile",
+        },
+    )
+    assert scheduled.status_code == 200, scheduled.text
+    assert scheduled.json()["platform"] == "facebook_profile"
+    assert scheduled.json()["publish_state"] == "scheduled"
+
+
+def test_due_facebook_profile_schedule_becomes_ready_to_share(client, auth_headers):
+    post = _create_post(client, auth_headers, platform="facebook_profile")
+    schedule_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    scheduled = client.post(
+        f"/api/v1/posts/{post['id']}/schedule",
+        headers=auth_headers,
+        json={
+            "schedule_time": schedule_at.isoformat(),
+            "platform": "facebook_profile",
+        },
+    )
+    assert scheduled.status_code == 200, scheduled.text
+
+    db = SessionLocal()
+    try:
+        schedule = db.query(ScheduledPost).filter(ScheduledPost.post_id == post["id"]).first()
+        schedule.schedule_time = datetime.now(timezone.utc) - timedelta(seconds=1)
+        db.commit()
+    finally:
+        db.close()
+
+    processed = client.post("/api/v1/publishing/process-due", headers=auth_headers)
+    assert processed.status_code == 200, processed.text
+    payload = processed.json()
+    assert payload["processed"] == 1
+    assert payload["ready_to_share"] == 1
+    assert payload["published"] == 0
+    assert payload["failed"] == 0
+    assert payload["results"][0]["mode"] == "manual"
+
+    db = SessionLocal()
+    try:
+        row = db.query(Post).filter(Post.id == post["id"]).first()
+        schedule = db.query(ScheduledPost).filter(ScheduledPost.post_id == post["id"]).first()
+        assert row.status == "ready_to_share"
+        assert schedule.publish_state == "ready_to_share"
+    finally:
+        db.close()
+
+
+def test_facebook_profile_cannot_use_automatic_publish_endpoint(client, auth_headers):
+    post = _create_post(client, auth_headers, platform="facebook_profile")
+    response = client.post(f"/api/v1/publishing/posts/{post['id']}", headers=auth_headers)
+    assert response.status_code == 400
+    assert "manual sharing" in response.json()["detail"].lower()
+
+
+def test_facebook_profile_can_be_marked_shared(client, auth_headers):
+    post = _create_post(client, auth_headers, platform="facebook_profile")
+    schedule_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    scheduled = client.post(
+        f"/api/v1/posts/{post['id']}/schedule",
+        headers=auth_headers,
+        json={
+            "schedule_time": schedule_at.isoformat(),
+            "platform": "facebook_profile",
+        },
+    )
+    assert scheduled.status_code == 200, scheduled.text
+
+    marked = client.post(
+        f"/api/v1/publishing/posts/{post['id']}/mark-shared",
+        headers=auth_headers,
+    )
+    assert marked.status_code == 200, marked.text
+    assert marked.json()["status"] == "shared"
+
+    db = SessionLocal()
+    try:
+        row = db.query(Post).filter(Post.id == post["id"]).first()
+        schedule = db.query(ScheduledPost).filter(ScheduledPost.post_id == post["id"]).first()
+        assert row.status == "shared"
+        assert schedule.publish_state == "shared"
+    finally:
+        db.close()

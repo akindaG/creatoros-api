@@ -42,6 +42,23 @@ def process_due_posts(db: Session, user_id=None, limit: int | None = None) -> di
     rows = query.order_by(ScheduledPost.schedule_time.asc()).limit(batch_size).all()
     results: list[dict] = []
     for schedule, post in rows:
+        if schedule.platform == "facebook_profile":
+            # Meta does not provide an API for silent publishing to personal
+            # Facebook profile timelines. At the requested time CreatorOS marks
+            # the post as ready so the user can complete the share themselves.
+            schedule.publish_state = "ready_to_share"
+            post.status = "ready_to_share"
+            db.commit()
+            results.append(
+                {
+                    "post_id": str(post.id),
+                    "status": "ready_to_share",
+                    "platform": "facebook_profile",
+                    "mode": "manual",
+                }
+            )
+            continue
+
         schedule.publish_state = "queued"
         post.status = "queued"
         db.commit()
@@ -51,6 +68,7 @@ def process_due_posts(db: Session, user_id=None, limit: int | None = None) -> di
     return {
         "processed": len(results),
         "published": sum(1 for item in results if item["status"] == "published"),
+        "ready_to_share": sum(1 for item in results if item["status"] == "ready_to_share"),
         "failed": sum(1 for item in results if item["status"] == "failed"),
         "results": results,
     }
