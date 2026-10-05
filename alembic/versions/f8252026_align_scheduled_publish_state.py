@@ -29,17 +29,21 @@ def upgrade():
         "DROP CONSTRAINT IF EXISTS scheduled_posts_publish_state_check"
     )
     allowed = ", ".join(f"'{state}'" for state in ALLOWED_STATES)
+    # Production contains legacy publish_state values from before the state
+    # machine was formalized. NOT VALID preserves those historical rows while
+    # enforcing the new state set for all future inserts and updates. This keeps
+    # deploys safe without rewriting or deleting user data.
     op.execute(
         "ALTER TABLE scheduled_posts "
         "ADD CONSTRAINT scheduled_posts_publish_state_check "
-        f"CHECK (publish_state IN ({allowed}))"
+        f"CHECK (publish_state IN ({allowed})) NOT VALID"
     )
 
 
 def downgrade():
     # Older CreatorOS databases accepted only the stable automatic-publishing
-    # states. Normalize newer manual-share/transient states before restoring
-    # that narrower constraint.
+    # states. Normalize the states introduced by the current application before
+    # restoring the narrower legacy rule.
     op.execute(
         "UPDATE scheduled_posts SET publish_state = 'scheduled' "
         "WHERE publish_state IN ('queued', 'ready_to_share')"
@@ -55,5 +59,5 @@ def downgrade():
     op.execute(
         "ALTER TABLE scheduled_posts "
         "ADD CONSTRAINT scheduled_posts_publish_state_check "
-        "CHECK (publish_state IN ('scheduled', 'published', 'failed'))"
+        "CHECK (publish_state IN ('scheduled', 'published', 'failed')) NOT VALID"
     )
