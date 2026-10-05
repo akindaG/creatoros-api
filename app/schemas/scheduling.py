@@ -1,5 +1,7 @@
 from datetime import datetime
 from typing import Optional
+
+from pydantic import Field
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -8,6 +10,11 @@ from pydantic import BaseModel, ConfigDict
 class ScheduleRequest(BaseModel):
     schedule_time: datetime
     platform: Optional[str] = None
+
+
+class MultiScheduleRequest(BaseModel):
+    schedule_time: datetime
+    platforms: list[str] = Field(min_length=1, max_length=2)
 
 
 class ScheduleResponse(BaseModel):
