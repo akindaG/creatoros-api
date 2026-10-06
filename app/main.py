@@ -15,6 +15,7 @@ from app.api.routes.posts import router as posts_router
 from app.api.routes.publishing import router as publishing_router
 from app.api.routes.recommendations import router as recommendations_router
 from app.api.routes.scheduling import router as scheduling_router
+from app.api.routes.search_intelligence import router as search_intelligence_router
 from app.api.routes.social_accounts import router as social_accounts_router
 from app.api.routes.users import router as users_router
 from app.core.config import settings
@@ -57,6 +58,7 @@ for router in (
     social_accounts_router,
     posts_router,
     scheduling_router,
+    search_intelligence_router,
     media_router,
     ai_router,
     analytics_router,
