@@ -26,7 +26,7 @@ FastAPI backend for CreatorOS AI, an AI-powered Social Growth Intelligence Platf
 - One-click Facebook Page and Instagram multi-platform publishing
 - Retry-safe partial publishing results
 - Facebook personal-profile assisted sharing
-- Gemini or Ollama/Qwen caption generation, hashtag generation, and content analysis
+- Google Gemini caption generation, hashtag generation, and content analysis
 - Deterministic AI fallback when enabled
 - Analytics snapshots, dashboard metrics, overview, and CSV export
 - Best posting-time and growth recommendation engine
@@ -73,9 +73,9 @@ FRONTEND_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
 ~~~
 
-## AI providers
+## AI service
 
-CreatorOS supports two providers behind the same AI endpoints.
+CreatorOS uses Google Gemini behind the same FastAPI AI endpoints for hosted caption generation, hashtag generation, and content analysis.
 
 Hosted production:
 
@@ -86,25 +86,9 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 AI_FALLBACK_ENABLED=true
 ~~~
 
-Local Qwen:
+The endpoints /api/v1/ai/caption, /api/v1/ai/hashtags, and /api/v1/ai/analyze use the backend AI service.
 
-~~~env
-AI_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen3
-AI_FALLBACK_ENABLED=true
-~~~
-
-Then run:
-
-~~~bash
-ollama pull qwen3
-ollama serve
-~~~
-
-The endpoints /api/v1/ai/caption, /api/v1/ai/hashtags, and /api/v1/ai/analyze use the selected provider.
-
-If the selected provider is unavailable and AI_FALLBACK_ENABLED=true, CreatorOS uses a deterministic fallback rather than breaking the workflow.
+If Gemini is temporarily unavailable and AI_FALLBACK_ENABLED=true, CreatorOS uses a deterministic fallback rather than breaking the workflow.
 
 Never commit GEMINI_API_KEY or other production secrets.
 
@@ -193,7 +177,7 @@ X-Cron-Secret: <CRON_SECRET>
 
 ## Tests
 
-The current repository contains 30 backend test functions covering authentication, core CRUD, media validation, AI provider selection, OAuth, Facebook and Instagram publishing, Facebook personal-profile assisted sharing, multi-platform publishing, multi-platform scheduling, analytics, and social-image normalization.
+The current repository contains 30 backend test functions covering authentication, core CRUD, media validation, AI service configuration, OAuth, Facebook and Instagram publishing, Facebook personal-profile assisted sharing, multi-platform publishing, multi-platform scheduling, analytics, and social-image normalization.
 
 Run:
 
