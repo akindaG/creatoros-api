@@ -1,6 +1,41 @@
+<div align="center">
+
 # CreatorOS AI API
 
-FastAPI backend for CreatorOS AI, an AI-powered Social Growth Intelligence Platform for Facebook and Instagram creators.
+### Production-oriented backend for an AI-powered social growth platform
+
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini-4285F4?style=for-the-badge&logo=googlegemini&logoColor=white)
+![Pytest](https://img.shields.io/badge/Pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)
+
+</div>
+
+CreatorOS AI is a full-stack project for Facebook and Instagram creator workflows. This repository contains the **FastAPI backend**, including authentication, social integrations, media handling, AI services, scheduling, publishing workflows, analytics, database migrations, and automated test coverage.
+
+> **Portfolio role:** evidence of backend architecture, relational persistence, API design, external integrations, AI-service integration, and operational workflow design.
+
+### Architecture at a glance
+
+```text
+Next.js Web
+    │
+    ▼
+ FastAPI
+    │
+    ├── Auth / Profiles
+    ├── Content + Media
+    ├── Gemini AI Services
+    ├── Social OAuth
+    ├── Scheduling / Publishing
+    └── Analytics
+    │
+    ▼
+PostgreSQL + SQLAlchemy + Alembic
+    │
+    └── Supabase Storage / Meta APIs
+```
 
 ## Project repositories
 
